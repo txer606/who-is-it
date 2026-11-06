@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Who Is It? Photos</title>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --bg:#0f1115;
+    --surface:#161a22;
+    --surface-2:#1d222c;
+    --border:#2a303c;
+    --text:#e7e9ee;
+    --muted:#8b93a3;
+    --accent:#3d6fe0;
+    --accent-hover:#4a7bea;
+    --danger:#d9534f;
+    --success:#3fae7a;
+    --warn:#d9a441;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;
+    font-size:15px;line-height:1.45;
+  }
+  header.top{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:14px 24px;border-bottom:1px solid var(--border);background:var(--surface);
+    position:sticky;top:0;z-index:5;
+  }
+  .brand{font-weight:700;letter-spacing:.01em}
+  .room{font-size:.82rem;color:var(--muted);border:1px solid var(--border);padding:5px 10px;border-radius:6px;font-variant-numeric:tabular-nums}
+  main{max-width:1040px;margin:0 auto;padding:28px 20px 60px}
+  .screen[hidden]{display:none}
+  h1{font-size:1.6rem;margin:0 0 4px;font-weight:700}
+  .sub{color:var(--muted);margin:0 0 22px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px}
+  .stack{display:flex;flex-direction:column;gap:16px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:720px){.grid2{grid-template-columns:1fr}}
+  .card h2{margin:0 0 4px;font-size:1.05rem;font-weight:600}
+  .desc{color:var(--muted);font-size:.9rem;margin:0 0 16px}
+  label{display:block;font-size:.78rem;color:var(--muted);margin:0 0 6px;font-weight:600}
+  input{
+    width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:11px 12px;font:inherit;outline:none;margin-bottom:12px;
+    transition:border-color .15s;
+  }
+  input::placeholder{color:#5a6273}
+  input:focus{border-color:var(--accent)}
+  input.code{letter-spacing:.2em;text-transform:uppercase;font-weight:600;text-align:center;font-size:1.05rem}
+  button{
+    font:inherit;font-weight:600;border:1px solid var(--accent);border-radius:8px;padding:10px 16px;cursor:pointer;
+    color:#fff;background:var(--accent);transition:background .15s, border-color .15s, opacity .15s;
+  }
+  button:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+  button:disabled{opacity:.45;cursor:not-allowed;background:var(--accent);border-color:var(--accent)}
+  button.ghost{background:transparent;color:var(--text);border-color:var(--border)}
+  button.ghost:hover{background:var(--surface-2);border-color:#3a4150}
+  button.danger{background:var(--danger);border-color:var(--danger)}
+  button.danger:hover{background:#e46560;border-color:#e46560}
+  button.block{width:100%}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .row>*{flex:1}
+  .row input{margin:0}
+  .msg{min-height:20px;color:var(--danger);font-size:.9rem;margin-top:14px;text-align:center}
+  .hint{color:var(--muted);font-size:.9rem;margin:10px 0 0}
+  .eyebrow{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700;margin:0 0 10px}
+
+  /* Lobby */
+  .code-box{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:20px}
+  .code-big{font-size:1.8rem;font-weight:700;letter-spacing:.25em;font-variant-numeric:tabular-nums}
+  .slots{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
+  @media(max-width:560px){.slots{grid-template-columns:1fr}}
+  .slot{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;align-items:center;gap:12px;min-height:76px}
+  .slot.empty{border-style:dashed;color:var(--muted);justify-content:center}
+  .avatar{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:var(--surface-2);border:1px solid var(--border);flex:0 0 auto}
+  .slot .nm{font-weight:600}
+  .tag{display:inline-block;font-size:.72rem;font-weight:600;padding:2px 8px;border-radius:4px;margin-top:4px;margin-right:4px;border:1px solid var(--border);color:var(--muted)}
+  .tag.ready{color:var(--success);border-color:rgba(63,174,122,.4)}
+  .tag.host{color:var(--warn);border-color:rgba(217,164,65,.4)}
+  .actions{display:flex;gap:10px;flex-wrap:wrap}
+  .actions>*{flex:1}
+
+  /* Game */
+  .players{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+  .player{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:var(--surface);border:1px solid var(--border);opacity:.6}
+  .player.active{opacity:1;border-color:var(--accent)}
+  .player .avatar{width:34px;height:34px;font-size:.9rem}
+  .player .nm{font-weight:600;font-size:.95rem}
+  .player .sub2{font-size:.78rem;color:var(--muted)}
+  .turn{text-align:center;padding:10px;border-radius:8px;background:var(--surface);border:1px solid var(--border);margin-bottom:16px;font-weight:600;font-size:.95rem}
+  .turn.mine{border-color:var(--success);color:var(--success)}
+  .game-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:16px;align-items:start}
+  @media(max-width:840px){.game-grid{grid-template-columns:1fr}}
+  .board{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+  @media(max-width:560px){.board{grid-template-columns:repeat(5,1fr);gap:6px}}
+  .tile{
+    position:relative;padding:0;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;
+    overflow:hidden;aspect-ratio:3/4;cursor:pointer;display:block;color:var(--text);
+    transition:border-color .12s, opacity .15s;
+  }
+  .tile:hover{border-color:#4a5366;background:var(--surface-2)}
+  .tile img{width:100%;height:100%;object-fit:cover;display:block;background:#1a1f29}
+  .tile img.missing{display:none}
+  .tile .num{position:absolute;left:6px;bottom:5px;font-size:.7rem;font-weight:700;background:rgba(15,17,21,.75);padding:1px 6px;border-radius:4px;color:#fff;font-variant-numeric:tabular-nums}
+  .tile .x{position:absolute;inset:0;display:none;background:rgba(15,17,21,.72)}
+  .tile .x svg{width:100%;height:100%}
+  .tile.down .x{display:block}
+  .tile.mine{border-color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn)}
+  .tile.sel{border-color:var(--danger);box-shadow:inset 0 0 0 2px var(--danger)}
+  .side{display:flex;flex-direction:column;gap:14px}
+  .secret{display:flex;align-items:center;gap:12px}
+  .secret .thumb{width:64px;height:84px;border-radius:6px;overflow:hidden;border:1px solid var(--border);background:var(--bg);flex:0 0 auto}
+  .secret .thumb img{width:100%;height:100%;object-fit:cover}
+  .qbox{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px}
+  .qbox .from{font-size:.78rem;color:var(--muted);margin-bottom:4px}
+  .qbox .text{font-weight:600}
+  .qbox img{width:100%;max-height:220px;object-fit:contain;border-radius:6px;margin-top:8px;background:#1a1f29}
+  .log{max-height:260px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+  .log div{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:.88rem;color:#c5cad6}
+  .log .empty{color:#5a6273;text-align:center;border-style:dashed}
+  .toast{
+    position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);opacity:0;pointer-events:none;
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:8px;
+    font-weight:500;transition:opacity .18s, transform .18s;z-index:10;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">Who Is It?</div>
+  <div class="room" id="roomBadge" hidden></div>
+</header>
+
+<main>
+  <!-- MENU -->
+  <section id="menu" class="screen">
+    <h1>Who Is It?</h1>
+    <p class="sub">Choose a photo for yourself, then find your friend's photo before they find yours.</p>
+
+    <div class="card" style="margin-bottom:16px">
+      <label for="nameInput">Your name</label>
+      <input id="nameInput" maxlength="16" placeholder="Enter your name" autocomplete="off" />
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Create a lobby</h2>
+        <p class="desc">Start a new game and share the code with a friend.</p>
+        <button id="createBtn" class="block">Create lobby</button>
+      </div>
+      <div class="card">
+        <h2>Join a lobby</h2>
+        <p class="desc">Enter the code from your friend.</p>
+        <label for="codeInput">Lobby code</label>
+        <input id="codeInput" class="code" maxlength="6" placeholder="ABC123" autocomplete="off" />
+        <button id="joinBtn" class="block ghost">Join lobby</button>
+      </div>
+    </div>
+    <div id="menuMsg" class="msg"></div>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="lobby" class="screen" hidden>
+    <h1>Lobby</h1>
+    <p class="sub">Both players press Ready to start the game.</p>
+    <div class="card">
+      <div class="code-box">
+        <div>
+          <div class="eyebrow" style="margin:0 0 4px">Lobby code</div>
+          <div id="lobbyCode" class="code-big"></div>
+        </div>
+        <button id="copyBtn" class="ghost">Copy code</button>
+      </div>
+      <div class="slots" id="slots"></div>
+      <p id="lobbyHint" class="hint"></p>
+      <div class="actions" style="margin-top:18px">
+        <button id="readyBtn">Ready</button>
+        <button id="leaveLobbyBtn" class="ghost">Leave lobby</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section id="game" class="screen" hidden>
+    <div class="players" id="players"></div>
+    <div class="turn" id="turnBar"></div>
+    <div class="game-grid">
+      <div class="card"><div class="board" id="board"></div></div>
+      <div class="side">
+        <div class="card">
+          <p class="eyebrow">Your photo</p>
+          <div id="secretBox"></div>
+        </div>
+        <div class="card" id="actionCard"></div>
+        <div class="card">
+          <p class="eyebrow">Activity</p>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+firebase.initializeApp({
+  apiKey: "AIzaSyCvF2kAbf7O5CwQV4AxXn5GTlREdybwyNU",
+  authDomain: "max-voice-adc1d.firebaseapp.com",
+  databaseURL: "https://max-voice-adc1d-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "max-voice-adc1d",
+  storageBucket: "max-voice-adc1d.firebasestorage.app",
+  messagingSenderId: "668396496300",
+  appId: "1:668396496300:web:f0f37b79b8f4e452fd8609"
+});
+const db = firebase.database();
+
+/* ---------- Photo setup ----------
+   Put 29 photos in a folder named "photos" next to this HTML file.
+   Name them 1.jpg to 29.jpg (also works with .jpeg, .png, .webp). */
+const PHOTO_COUNT = 29;
+const PHOTO_FOLDER = "photos/";
+const EXTS = ["jpg", "jpeg", "png", "webp", "JPG", "JPEG", "PNG", "WEBP"];
+const resolved = {};  // photo number -> working relative path
+
+const PHOTO_IDS = Array.from({ length: PHOTO_COUNT }, (_, k) => k + 1);
+const photoSrc = n => resolved[n] || `${PHOTO_FOLDER}${n}.${EXTS[0]}`;
+
+// Try the next file extension when a photo fails to load
+document.addEventListener("error", e => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.dataset.n) return;
+  const t = +img.dataset.t + 1;
+  if (t < EXTS.length) {
+    img.dataset.t = t;
+    img.src = `${PHOTO_FOLDER}${img.dataset.n}.${EXTS[t]}`;
+  } else {
+    img.classList.add("missing");
+  }
+}, true);
+document.addEventListener("load", e => {
+  const img = e.target;
+  if (img instanceof HTMLImageElement && img.dataset.n) {
+    resolved[img.dataset.n] = img.getAttribute("src");
+  }
+}, true);
+
+/* ---------- Helpers ----------*/
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const initial = n => esc((n || "?").trim().charAt(0).toUpperCase());
+const pad = n => String(n).padStart(2, "0");
+const pOf = l => (l && l.players) || {};
+const pendingQ = l => !!(l.question && l.question.answer == null);
+const pendingG = l => !!(l.guess && l.guess.result == null);
+const X_SVG = `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M18 18 L82 82 M82 18 L18 82" stroke="#d9534f" stroke-width="5" stroke-linecap="round" fill="none" vector-effect="non-scaling-stroke"/></svg>`;
+
+const uid = "u" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+let me = { name: "" };
+let code = null, lobbyRef = null, lobby = null;
+let flipped = new Set(), secret = null, selectedGuess = null, guessMode = false;
+let stamp = null, busy = false, draft = "";
+
+/* ---------- UI helpers ---------- */
+function show(id) {
+  document.querySelectorAll(".screen").forEach(s => s.hidden = s.id !== id);
+  $("#roomBadge").hidden = id === "menu" || !code;
+}
+function menuMsg(t) { $("#menuMsg").textContent = t; }
+function toast(t) {
+  const el = $("#toast");
+  el.textContent = t; el.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 2400);
+}
+function getName() {
+  const n = $("#nameInput").value.trim().slice(0, 16);
+  if (!n) { menuMsg("Please enter your name."); return null; }
+  me.name = n; return n;
+}
+function genCode() {
+  const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = ""; for (let i = 0; i < 6; i++) s += A[Math.floor(Math.random() * A.length)];
+  return s;
+}
+
+/* ---------- Lobby creation / joining ---------- */
+async function createLobby() {
+  const name = getName(); if (!name) return;
+  for (let t = 0; t < 5; t++) {
+    const c = genCode();
+    const res = await db.ref("lobbies/" + c).transaction(cur =>
+      cur === null
+        ? { status: "waiting", hostId: uid, createdAt: Date.now(), players: { [uid]: { name, ready: false } } }
+        : undefined
+    );
+    if (res.committed) return enter(c);
+  }
+  menuMsg("Could not create a lobby. Try again.");
+}
+
+async function joinLobby() {
+  const name = getName(); if (!name) return;
+  const c = $("#codeInput").value.trim().toUpperCase();
+  if (!c) { menuMsg("Enter a lobby code."); return; }
+
+  const ref = db.ref("lobbies/" + c);
+  const res = await ref.transaction(cur => {
+    // First pass may run with null before server data arrives; returning null lets it retry.
+    if (cur === null) return null;
+    const players = { ...pOf(cur) };
+    if (players[uid]) return cur;
+    if (cur.status !== "waiting" || Object.keys(players).length >= 2) return;
+    players[uid] = { name, ready: false };
+    return { ...cur, players };
+  });
+
+  const val = res.snapshot.val();
+  if (!val) return menuMsg("No lobby found with that code.");
+  if (pOf(val)[uid]) return enter(c);
+  menuMsg("This lobby is full or already in a game.");
+}
+
+function enter(c) {
+  code = c;
+  menuMsg("");
+  lobbyRef = db.ref("lobbies/" + c);
+  $("#roomBadge").textContent = "Lobby " + c;
+  lobbyRef.child("players/" + uid).onDisconnect().remove();
+  lobbyRef.on("value", s => onLobby(s.val()));
+}
+
+/* ---------- Central state handler ---------- */
+function onLobby(val) {
+  if (!val) return resetLocal("The lobby was closed.");
+  lobby = val;
+  const players = pOf(val), ids = Object.keys(players);
+  if (!players[uid]) return resetLocal("You are no longer in this lobby.");
+
+  if (val.status === "waiting") { renderLobby(); show("lobby"); }
+  else { renderGame(); show("game"); }
+
+  if (busy) return;
+  const starter = players[val.hostId] ? val.hostId : ids[0];
+  if (val.status === "waiting" && starter === uid && ids.length === 2 && ids.every(i => players[i].ready)) {
+    busy = true;
+    const turn = ids[Math.random() < 0.5 ? 0 : 1];
+    lobbyRef.update({ status: "playing", startedAt: Date.now(), turn, question: null, guess: null, winner: null, log: null })
+      .finally(() => busy = false);
+  } else if (val.status === "playing" && ids.length < 2) {
+    busy = true;   // opponent left mid-game
+    lobbyRef.update({ status: "over", winner: ids[0] }).finally(() => busy = false);
+  }
+}
+
+/* ---------- Lobby screen ---------- */
+function renderLobby() {
+  const players = pOf(lobby), ids = Object.keys(players);
+  $("#lobbyCode").textContent = code;
+
+  const slots = ids.map(i => {
+    const p = players[i];
+    return `<div class="slot">
+      <div class="avatar">${initial(p.name)}</div>
+      <div>
+        <div class="nm">${esc(p.name)}${i === uid ? ' <span style="color:var(--muted);font-weight:400">(you)</span>' : ""}</div>
+        <span class="tag ${p.ready ? "ready" : ""}">${p.ready ? "Ready" : "Not ready"}</span>${i === lobby.hostId ? '<span class="tag host">Host</span>' : ""}
+      </div>
+    </div>`;
+  });
+  while (slots.length < 2) slots.push(`<div class="slot empty">Waiting for a friend</div>`);
+  $("#slots").innerHTML = slots.join("");
+
+  const mine = players[uid];
+  const btn = $("#readyBtn");
+  btn.textContent = mine.ready ? "Cancel ready" : "Ready";
+  btn.className = mine.ready ? "ghost" : "";
+
+  $("#lobbyHint").textContent = ids.length < 2
+    ? "Share the lobby code so your friend can join."
+    : ids.every(i => players[i].ready) ? "Starting game…" : "Both players must be ready to start.";
+}
+
+$("#readyBtn").onclick = () => {
+  const mine = pOf(lobby)[uid];
+  if (mine) lobbyRef.child(`players/${uid}/ready`).set(!mine.ready);
+};
+
+$("#copyBtn").onclick = async () => {
+  try { await navigator.clipboard.writeText(code); toast("Code copied"); }
+  catch { toast("Code: " + code); }
+};
+
+/* ---------- Game screen ---------- */
+function canAct() {
+  return !!lobby && lobby.status === "playing" && lobby.turn === uid &&
+    !pendingQ(lobby) && !pendingG(lobby) && secret !== null && Object.keys(pOf(lobby)).length === 2;
+}
+
+function renderGame() {
+  const players = pOf(lobby), ids = Object.keys(players);
+  const oppId = ids.find(i => i !== uid);
+  const opp = oppId ? players[oppId] : null;
+  const oppName = opp ? opp.name : "Opponent";
+
+  if (lobby.startedAt !== stamp) {
+    stamp = lobby.startedAt;
+    flipped = new Set(); secret = null; selectedGuess = null; guessMode = false;
+  }
+
+  const over = lobby.status === "over";
+  const q = lobby.question, g = lobby.guess;
+  const myTurn = lobby.turn === uid;
+  const active = !over ? lobby.turn : null;
+
+  const player = (id, name, isMe) => `
+    <div class="player ${active === id ? "active" : ""}">
+      <div class="avatar">${initial(name)}</div>
+      <div>
+        <div class="nm">${esc(name)}</div>
+        <div class="sub2">${isMe ? "You" : "Opponent"}${active === id ? " · Turn" : ""}</div>
+      </div>
+    </div>`;
+  $("#players").innerHTML = player(uid, me.name, true) + player(oppId, oppName, false);
+
+  let tb = "", cls = "";
+  if (over) tb = lobby.winner === uid ? "You won the round." : lobby.winner ? `Round over. ${esc(oppName)} won.` : "Round over.";
+  else if (!opp) tb = "Opponent disconnected.";
+  else if (myTurn) { tb = "Your turn. Ask a question or make a guess."; cls = "mine"; }
+  else tb = `${esc(oppName)}'s turn.`;
+  $("#turnBar").className = "turn " + cls;
+  $("#turnBar").textContent = tb.replace(/<[^>]+>/g, "");
+
+  $("#board").innerHTML = PHOTO_IDS.map(n => `
+    <button class="tile ${flipped.has(n) ? "down" : ""} ${secret === n ? "mine" : ""} ${selectedGuess === n ? "sel" : ""}" data-i="${n}" aria-label="Photo ${n}">
+      <img src="${esc(photoSrc(n))}" data-n="${n}" data-t="0" alt="Photo ${n}" loading="lazy" />
+      <span class="num">${pad(n)}</span>
+      <span class="x">${X_SVG}</span>
+    </button>`).join("");
+
+  $("#secretBox").innerHTML = secret === null
+    ? `<p class="hint" style="margin:0">Select a photo as your own. Your friend cannot see it.</p>`
+    : `<div class="secret">
+         <div class="thumb"><img src="${esc(photoSrc(secret))}" data-n="${secret}" data-t="0" alt="Your photo" /></div>
+         <div><div style="font-weight:600">Photo ${pad(secret)}</div><span class="tag ready">Locked in</span></div>
+       </div>`;
+
+  let html = "";
+  if (over) {
+    html = `<p class="eyebrow">Round over</p>
+      <p style="margin:0 0 14px">${lobby.winner === uid ? "Correct guess. You win." : "Wrong guess or opponent won."}</p>
+      <div class="row"><button data-act="rematch">Play again</button><button class="ghost" data-act="leave">Main menu</button></div>`;
+  } else if (g && g.result == null) {
+    html = g.from === uid
+      ? `<p class="eyebrow">Your guess</p><p class="hint" style="margin:0">Waiting for ${esc(oppName)} to confirm…</p>`
+      : `<p class="eyebrow">Guess to confirm</p>
+         <div class="qbox"><div class="from">${esc(g.name)} guesses this photo</div>
+           <img src="${esc(photoSrc(g.index))}" alt="Guessed photo" /></div>
+         <div class="row"><button data-act="gyes">Yes, correct</button><button class="danger" data-act="gno">No</button></div>`;
+  } else if (q && q.answer == null) {
+    html = q.from === uid
+      ? `<p class="eyebrow">Your question</p><p class="hint" style="margin:0">Waiting for ${esc(oppName)} to answer…</p>`
+      : `<p class="eyebrow">Question</p>
+         <div class="qbox"><div class="from">${esc(q.name)} asks</div><div class="text">${esc(q.text)}</div></div>
+         <div class="row"><button data-act="qyes">Yes</button><button class="danger" data-act="qno">No</button></div>`;
+  } else if (myTurn && opp) {
+    html = `<p class="eyebrow">Your move</p>
+      <div class="row">
+        <input id="qInput" maxlength="120" placeholder="Ask a yes or no question" value="${esc(draft)}" autocomplete="off" />
+        <button data-act="ask" ${secret === null ? "disabled" : ""}>Ask</button>
+      </div>
+      <div class="row" style="margin-top:2px">
+        <button class="ghost" data-act="gmode">${guessMode ? "Cancel guess" : "Make a guess"}</button>
+        ${guessMode ? `<button class="danger" data-act="sendguess" ${selectedGuess === null ? "disabled" : ""}>
+          ${selectedGuess === null ? "Select a photo" : "Guess photo " + pad(selectedGuess)}</button>` : ""}
+      </div>
+      ${guessMode ? `<p class="hint">Select a photo on the board, then confirm. A wrong guess ends the round.</p>` : ""}`;
+  } else {
+    html = `<p class="eyebrow">Waiting</p><p class="hint" style="margin:0">${esc(oppName)}'s turn.</p>`;
+  }
+  $("#actionCard").innerHTML = html;
+  renderLog();
+}
+
+function renderLog() {
+  const logs = lobby.log ? Object.values(lobby.log) : [];
+  $("#log").innerHTML = logs.slice(-30).map(l => `<div>${esc(l.text)}</div>`).join("") ||
+    `<div class="empty">No activity yet</div>`;
+  $("#log").scrollTop = $("#log").scrollHeight;
+}
+
+// Board: choose your photo, flip tiles, or select a guess
+$("#board").onclick = e => {
+  const b = e.target.closest("[data-i]");
+  if (!b || !lobby || lobby.status !== "playing") return;
+  const n = +b.dataset.i;
+  if (secret === null) { secret = n; return renderGame(); }
+  if (guessMode) {
+    if (canAct()) { selectedGuess = n; renderGame(); }
+    else toast("It is not your turn");
+    return;
+  }
+  if (n === secret) return;
+  flipped.has(n) ? flipped.delete(n) : flipped.add(n);
+  renderGame();
+};
+
+$("#actionCard").onclick = e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  switch (b.dataset.act) {
+    case "ask": return ask();
+    case "gmode": guessMode = !guessMode; selectedGuess = null; return renderGame();
+    case "sendguess": return sendGuess();
+    case "qyes": return answerQ("yes");
+    case "qno": return answerQ("no");
+    case "gyes": return answerGuess(true);
+    case "gno": return answerGuess(false);
+    case "rematch": return rematch();
+    case "leave": return leave();
+  }
+};
+$("#actionCard").oninput = e => { if (e.target.id === "qInput") draft = e.target.value; };
+$("#actionCard").onkeydown = e => { if (e.target.id === "qInput" && e.key === "Enter") ask(); };
+
+async function ask() {
+  const t = draft.trim().slice(0, 120);
+  if (!t) return toast("Type a question first");
+  if (secret === null) return toast("Select your photo first");
+  if (!canAct()) return toast("Wait for your turn");
+  draft = "";
+  await lobbyRef.child("question").set({ id: String(Date.now()), from: uid, name: me.name, text: t, answer: null });
+}
+
+async function answerQ(ans) {
+  const q = lobby.question; if (!q || q.answer != null) return;
+  await lobbyRef.update({ "question/answer": ans, turn: uid });
+  await lobbyRef.child("log").push({ text: `${q.name} asked "${q.text}". Answer: ${ans === "yes" ? "Yes" : "No"}.` });
+}
+
+async function sendGuess() {
+  if (selectedGuess === null || !canAct()) return;
+  const n = selectedGuess;
+  selectedGuess = null; guessMode = false;
+  await lobbyRef.child("guess").set({ id: String(Date.now()), from: uid, name: me.name, index: n, result: null });
+}
+
+async function answerGuess(yes) {
+  const g = lobby.guess; if (!g || g.result != null) return;
+  const winner = yes ? g.from : uid;
+  await lobbyRef.update({ "guess/result": yes ? "yes" : "no", status: "over", winner });
+  await lobbyRef.child("log").push({ text: `${g.name} guessed photo ${pad(g.index)}. ${yes ? "Correct." : "Incorrect."}` });
+}
+
+async function rematch() {
+  const u = { status: "waiting", winner: null, question: null, guess: null, turn: null, log: null, startedAt: null };
+  Object.keys(pOf(lobby)).forEach(i => u[`players/${i}/ready`] = false);
+  await lobbyRef.update(u);
+}
+
+/* ---------- Leaving ---------- */
+async function leave() {
+  const ref = lobbyRef, c = code;
+  if (!ref) return resetLocal();
+  ref.off();
+  const myRef = db.ref(`lobbies/${c}/players/${uid}`);
+  myRef.onDisconnect().cancel();
+  await myRef.remove();
+  await db.ref(`lobbies/${c}`).transaction(cur =>
+    (cur === null || Object.keys(pOf(cur)).length === 0) ? null : cur
+  );
+  resetLocal();
+}
+
+function resetLocal(msg) {
+  if (lobbyRef) lobbyRef.off();
+  lobbyRef = null; lobby = null; code = null; stamp = null; busy = false;
+  flipped = new Set(); secret = null; selectedGuess = null; guessMode = false; draft = "";
+  show("menu"); menuMsg(msg || "");
+}
+
+/* ---------- Menu wiring ---------- */
+$("#createBtn").onclick = createLobby;
+$("#joinBtn").onclick = joinLobby;
+$("#codeInput").onkeydown = e => { if (e.key === "Enter") joinLobby(); };
+$("#nameInput").onkeydown = e => { if (e.key === "Enter") createLobby(); };
+$("#leaveLobbyBtn").onclick = leave;
+
+show("menu");
+</script>
+</body>
+</html>
